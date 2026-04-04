@@ -41,6 +41,11 @@
           };
       in {
         devShells.default = pkgs.mkShell {
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            zlib
+            openssl
+          ];
           packages = [
             custom-rust-bin
           ];
