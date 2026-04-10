@@ -1,5 +1,6 @@
-use crate::utils::patcher::Patcher;
+use crate::patcher::patcher::Patcher;
 
-pub fn push(patcher: &Patcher) -> anyhow::Result<()> {
-    todo!()
+pub fn push(patcher: &mut Patcher) -> anyhow::Result<()> {
+    patcher.push()?;
+    Ok(())
 }

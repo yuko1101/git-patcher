@@ -1,5 +1,6 @@
-use crate::utils::patcher::Patcher;
+use crate::patcher::patcher::Patcher;
 
-pub fn pop(patcher: &Patcher) -> anyhow::Result<()> {
-    todo!()
+pub fn pop(patcher: &mut Patcher) -> anyhow::Result<()> {
+    patcher.pop()?;
+    Ok(())
 }

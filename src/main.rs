@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use anyhow::Ok;
+use anyhow::{Context, Ok};
 use clap::{Parser, Subcommand};
 
-use crate::utils::patcher::Patcher;
+use crate::patcher::patcher::Patcher;
 
 mod commands;
+mod patcher;
 mod utils;
 
 #[derive(Parser, Debug)]
@@ -24,21 +25,15 @@ enum SubCommand {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let root = args.root.unwrap_or_else(|| {
-        utils::git_utils::find_root(&std::env::current_dir().unwrap())
-            .expect("Failed to find git root")
-    });
+    let root = args
+        .root
+        .or_else(|| utils::git_utils::find_root(&std::env::current_dir().ok()?)).context("Failed to find git repository root. Please specify the root directory with --root option.")?;
 
-    let patcher = Patcher {
-        root: root.clone(),
-        upstream: root.join("upstream"),
-        patches: root.join("patches"),
-        internal: root.join(".git-patcher"),
-    };
+    let mut patcher = Patcher::new(root)?;
 
     match args.subcommand {
-        SubCommand::Push => commands::push::push(&patcher)?,
-        SubCommand::Pop => commands::pop::pop(&patcher)?,
+        SubCommand::Push => commands::push::push(&mut patcher)?,
+        SubCommand::Pop => commands::pop::pop(&mut patcher)?,
     }
 
     Ok(())
