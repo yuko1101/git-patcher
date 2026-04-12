@@ -100,14 +100,14 @@ impl Patcher {
         for oid in diff_commits {
             println!("Generating patch for commit: {}", oid);
             let commit = self.upstream_repo.find_commit(oid)?;
-            let diff = self.upstream_repo.diff_tree_to_tree(
-                Some(&parent.tree()?),
-                Some(&commit.tree()?),
-                None,
-            )?;
 
             let patch_path = self.patches.join(format!("{}.patch", oid)); // TODO: use commit message or something more descriptive
-            utils::git_utils::write_patch_to_file(&diff, &patch_path)?;
+            utils::git_utils::write_patch_to_file(
+                &parent,
+                &commit,
+                &self.upstream_repo,
+                &patch_path,
+            )?;
             patch_series.push_patch(patch_path)?;
 
             parent = commit;
