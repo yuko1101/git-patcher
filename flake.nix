@@ -61,5 +61,29 @@
 
         packages.default = build "git-patcher" ./.;
       }
-    );
+    )
+    // {
+      lib = {
+        applyPatches = {
+          src,
+          upstream,
+          pkgs,
+          ...
+        }:
+          pkgs.runCommand "apply-patches" {
+            buildInputs = [pkgs.git];
+          } ''
+            mkdir -p $out
+            cp -r ${upstream}/. $out/
+            cd $out
+            git init
+            while IFS= read -r line; do
+                echo "Applying patch: $line"
+                git apply "$src/patches/$line"
+            done < "$src/patches/series"
+            echo "All patches applied successfully."
+            rm -rf .git
+          '';
+      };
+    };
 }
