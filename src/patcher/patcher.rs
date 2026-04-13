@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::bail;
-use git2::{ApplyLocation, Diff, Repository, Signature, build::CheckoutBuilder};
+use git2::{ApplyLocation, Diff, Repository, build::CheckoutBuilder};
 
 use crate::{
     patcher::{internal_state::InternalState, patch_series::PatchSeries},
-    utils,
+    utils::{self, patch_utils::generate_patch_name},
 };
 
 pub struct Patcher {
@@ -98,13 +98,21 @@ impl Patcher {
             .rev();
 
         let target_commit = self.upstream_repo.find_commit(target_oid)?;
+
         let mut parent = target_commit.clone();
         let mut patches_pushed = false;
+
+        let offset = patch_series.len();
+        let patch_count = diff_commits.len() + offset;
+        let mut index = offset;
+
         for oid in diff_commits {
             println!("Generating patch for commit: {}", oid);
             let commit = self.upstream_repo.find_commit(oid)?;
 
-            let patch_path = self.patches.join(format!("{}.patch", oid)); // TODO: use commit message or something more descriptive
+            let patch_path = self
+                .patches
+                .join(generate_patch_name(&commit, index, patch_count));
             utils::patch_utils::write_patch_to_file(
                 &parent,
                 &commit,
@@ -115,6 +123,7 @@ impl Patcher {
 
             parent = commit;
             patches_pushed = true;
+            index += 1;
         }
 
         if patches_pushed {

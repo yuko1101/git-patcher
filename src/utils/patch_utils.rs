@@ -1,8 +1,9 @@
-use std::{collections::HashMap, fs::OpenOptions, io::Write, path::Path};
+use std::{collections::HashMap, fs::OpenOptions, io::Write, path::Path, sync::LazyLock};
 
 use anyhow::Context;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use git2::{Commit, Delta, DiffFindOptions, DiffStatsFormat, Repository};
+use regex::Regex;
 
 use crate::utils::sig_utils::SignatureData;
 
@@ -174,4 +175,22 @@ pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
         committer: committer_sig,
         commit_message,
     })
+}
+
+const RE_NON_ALPHA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-zA-Z0-9]+").unwrap());
+const RE_MULTIPLE_HYPHENS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-+").unwrap());
+pub fn generate_patch_name(commit: &Commit, index: usize, patch_count: usize) -> String {
+    let title = commit.summary().unwrap_or("untitled");
+    let mut slug = RE_NON_ALPHA.replace_all(title, "-").to_lowercase();
+    slug = RE_MULTIPLE_HYPHENS.replace_all(&slug, "-").into_owned();
+    let trimmed_slug = slug.trim_matches('-');
+    let final_slug = if trimmed_slug.len() > 52 {
+        &trimmed_slug[..52]
+    } else {
+        trimmed_slug
+    }
+    .trim_matches('-');
+
+    let digits = patch_count.to_string().len().max(4);
+    format!("{:0width$}-{}.patch", index + 1, final_slug, width = digits)
 }

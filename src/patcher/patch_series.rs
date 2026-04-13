@@ -105,6 +105,10 @@ impl PatchSeries {
         Some((path, Ok(content)))
     }
 
+    pub fn len(&self) -> usize {
+        self.patches.len()
+    }
+
     pub fn save(&mut self) -> anyhow::Result<()> {
         let mut series_content = String::new();
         for patch in &self.patches {
