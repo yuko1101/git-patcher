@@ -76,11 +76,11 @@
             mkdir -p $out
             cp -r ${upstream}/. $out/
             cd $out
-            git init
+            git init -b main
             while IFS= read -r line; do
                 echo "Applying patch: $line"
-                git apply "$src/patches/$line"
-            done < "$src/patches/series"
+                git apply "${src}/patches/$line"
+            done < "${src}/patches/series"
             echo "All patches applied successfully."
             rm -rf .git
           '';
