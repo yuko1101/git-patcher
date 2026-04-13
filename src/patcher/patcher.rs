@@ -56,7 +56,7 @@ impl Patcher {
             let tree = self.upstream_repo.find_tree(tree_id)?;
 
             let parent = self.upstream_repo.head()?.peel_to_commit()?;
-            let patch_metadata = utils::git_utils::parse_patch_metadata(&patch_bytes)?;
+            let patch_metadata = utils::patch_utils::parse_patch_metadata(&patch_bytes)?;
 
             self.upstream_repo.commit(
                 Some("HEAD"),
@@ -105,7 +105,7 @@ impl Patcher {
             let commit = self.upstream_repo.find_commit(oid)?;
 
             let patch_path = self.patches.join(format!("{}.patch", oid)); // TODO: use commit message or something more descriptive
-            utils::git_utils::write_patch_to_file(
+            utils::patch_utils::write_patch_to_file(
                 &parent,
                 &commit,
                 &self.upstream_repo,

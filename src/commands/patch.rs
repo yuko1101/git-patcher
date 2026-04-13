@@ -1,7 +1,7 @@
 use anyhow::bail;
 use git2::Oid;
 
-use crate::utils::git_utils;
+use crate::utils::patch_utils;
 
 pub fn get_patch(commit: Oid, parent: Option<Oid>) -> anyhow::Result<()> {
     let repo = git2::Repository::open(".")?;
@@ -16,7 +16,7 @@ pub fn get_patch(commit: Oid, parent: Option<Oid>) -> anyhow::Result<()> {
             ),
         },
     };
-    let patch = git_utils::get_patch(&parent, &commit, &repo)?;
+    let patch = patch_utils::get_patch(&parent, &commit, &repo)?;
     println!("{}", patch);
 
     Ok(())
