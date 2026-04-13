@@ -45,8 +45,9 @@ impl Patcher {
         let mut patch_series = self.get_patch_series()?;
         let mut patches_consumed = false;
         for patch in patch_series.consumer() {
+            let patch_bytes = patch.1?;
             println!("Applying patch: {}", patch.0.display());
-            let diff = Diff::from_buffer(&patch.1?)?;
+            let diff = Diff::from_buffer(&patch_bytes)?;
             self.upstream_repo
                 .apply(&diff, ApplyLocation::Index, None)?;
 
@@ -55,14 +56,16 @@ impl Patcher {
             let tree = self.upstream_repo.find_tree(tree_id)?;
 
             let parent = self.upstream_repo.head()?.peel_to_commit()?;
-            let sig = Signature::now("Your Name", "your@email.com")?;
-            let msg = format!(
-                "Apply patch: {}",
-                patch.0.file_name().unwrap().to_string_lossy()
-            );
+            let patch_metadata = utils::git_utils::parse_patch_metadata(&patch_bytes)?;
 
-            self.upstream_repo
-                .commit(Some("HEAD"), &sig, &sig, &msg, &tree, &[&parent])?;
+            self.upstream_repo.commit(
+                Some("HEAD"),
+                &patch_metadata.author.as_signature()?,
+                &patch_metadata.committer.as_signature()?,
+                &patch_metadata.commit_message,
+                &tree,
+                &[&parent],
+            )?;
             patches_consumed = true;
         }
 
