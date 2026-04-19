@@ -61,7 +61,7 @@ impl Patcher {
             let parent = self.upstream_repo.head()?.peel_to_commit()?;
             let patch_metadata = utils::patch_utils::parse_patch_metadata(&patch_bytes)?;
 
-            self.upstream_repo.commit(
+            let new_commit_oid = self.upstream_repo.commit(
                 Some("HEAD"),
                 &patch_metadata.author.as_signature()?,
                 &patch_metadata.committer.as_signature()?,
@@ -69,6 +69,15 @@ impl Patcher {
                 &tree,
                 &[&parent],
             )?;
+            if new_commit_oid != patch_metadata.commit_hash {
+                eprintln!(
+                    "Warning: The generated commit hash {} does not match the expected commit hash {} for patch {}. This may indicate that the patch was modified after being generated.",
+                    new_commit_oid,
+                    patch_metadata.commit_hash,
+                    patch.0.display()
+                );
+            }
+
             patches_consumed = true;
         }
 
@@ -177,6 +186,14 @@ impl Patcher {
                 &tree,
                 &[&parent],
             )?;
+            if new_commit_oid != patch_metadata.commit_hash {
+                eprintln!(
+                    "Warning: The generated commit hash {} does not match the expected commit hash {} for patch {}. This may indicate that the patch was modified after being generated.",
+                    new_commit_oid,
+                    patch_metadata.commit_hash,
+                    patch.0.display()
+                );
+            }
 
             parent = self.root_repo.find_commit(new_commit_oid)?;
         }

@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs::OpenOptions, io::Write, path::Path, sync::La
 
 use anyhow::Context;
 use base64::{Engine, prelude::BASE64_STANDARD};
-use git2::{Commit, Delta, DiffFindOptions, DiffStatsFormat, Repository};
+use git2::{Commit, Delta, DiffFindOptions, DiffStatsFormat, Oid, Repository};
 use regex::Regex;
 
 use crate::utils::sig_utils::SignatureData;
@@ -10,6 +10,7 @@ use crate::utils::sig_utils::SignatureData;
 const X_GIT_PATCHER_AUTHOR: &str = "X-Git-Patcher-Author";
 const X_GIT_PATCHER_COMMITTER: &str = "X-Git-Patcher-Committer";
 const X_GIT_PATCHER_COMMIT_MESSAGE: &str = "X-Git-Patcher-Commit-Message";
+const X_GIT_PATCHER_COMMIT_HASH: &str = "X-Git-Patcher-Commit-Hash";
 pub fn get_patch(parent: &Commit, commit: &Commit, repo: &Repository) -> anyhow::Result<String> {
     let mut diff = repo.diff_tree_to_tree(Some(&parent.tree()?), Some(&commit.tree()?), None)?;
     let mut find_opts = DiffFindOptions::new();
@@ -48,6 +49,7 @@ pub fn get_patch(parent: &Commit, commit: &Commit, repo: &Repository) -> anyhow:
         "{X_GIT_PATCHER_COMMIT_MESSAGE}: {}\n",
         BASE64_STANDARD.encode(commit.message_raw_bytes())
     ));
+    patch.push_str(&format!("{X_GIT_PATCHER_COMMIT_HASH}: {}\n", commit.id()));
 
     patch.push_str("\n");
 
@@ -127,6 +129,7 @@ pub struct PatchMetadata {
     pub author: SignatureData,
     pub committer: SignatureData,
     pub commit_message: String,
+    pub commit_hash: Oid,
 }
 pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
     let headers = std::str::from_utf8(vec)?
@@ -170,10 +173,21 @@ pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
     // TODO: avoid unnecessary UTF-8 conversion by directly using the bytes when creating the commit object in git2
     let commit_message = std::str::from_utf8(&commit_message)?.to_string();
 
+    let commit_hash = headers
+        .get(X_GIT_PATCHER_COMMIT_HASH)
+        .with_context(|| format!("Missing {} header in patch", X_GIT_PATCHER_COMMIT_HASH))?;
+    let commit_hash = Oid::from_str(commit_hash).with_context(|| {
+        format!(
+            "Failed to parse commit hash in {} header: invalid OID format",
+            X_GIT_PATCHER_COMMIT_HASH
+        )
+    })?;
+
     Ok(PatchMetadata {
         author: author_sig,
         committer: committer_sig,
         commit_message,
+        commit_hash,
     })
 }
 
