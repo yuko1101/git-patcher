@@ -10,6 +10,7 @@ use crate::{
 
 pub struct Patcher {
     pub root: PathBuf,
+    pub root_repo: Repository,
     pub upstream_path: PathBuf,
     pub upstream_repo: Repository,
     pub state: InternalState,
@@ -19,6 +20,7 @@ pub struct Patcher {
 
 impl Patcher {
     pub fn new(root: PathBuf) -> anyhow::Result<Self> {
+        let root_repo = Repository::open(&root)?;
         let upstream_path = root.join("upstream");
         let upstream_repo = Repository::open(&upstream_path)?;
 
@@ -26,6 +28,7 @@ impl Patcher {
 
         Ok(Self {
             root: root.clone(),
+            root_repo,
             upstream_path,
             upstream_repo,
             state,
@@ -135,6 +138,52 @@ impl Patcher {
 
         self.state.target_revision = None;
         self.state.save()?;
+        Ok(())
+    }
+
+    pub fn sync_source(&mut self) -> anyhow::Result<()> {
+        // fetch upstream base to root
+        let upstream_head = self.upstream_repo.head()?.peel_to_commit()?;
+        let mut remote = self
+            .root_repo
+            .remote_anonymous(&self.upstream_path.to_string_lossy())?;
+        println!(
+            "Fetching upstream head {} to root repository",
+            upstream_head.id()
+        );
+        remote.fetch(&[upstream_head.id().to_string()], None, None)?;
+
+        let mut parent = self.root_repo.find_commit(upstream_head.id())?;
+        let mut tree = parent.tree()?;
+
+        let patch_series = self.get_patch_series()?;
+        for patch in patch_series.peeker() {
+            let patch_bytes = patch.1?;
+            println!("Applying patch: {}", patch.0.display());
+            let diff = Diff::from_buffer(&patch_bytes)?;
+            tree = self.root_repo.find_tree(
+                self.root_repo
+                    .apply_to_tree(&tree, &diff, None)?
+                    .write_tree_to(&self.root_repo)?,
+            )?;
+
+            let patch_metadata = utils::patch_utils::parse_patch_metadata(&patch_bytes)?;
+
+            let new_commit_oid = self.root_repo.commit(
+                None,
+                &patch_metadata.author.as_signature()?,
+                &patch_metadata.committer.as_signature()?,
+                &patch_metadata.commit_message,
+                &tree,
+                &[&parent],
+            )?;
+
+            parent = self.root_repo.find_commit(new_commit_oid)?;
+        }
+
+        let patched_branch_name = "git-patcher/patched";
+        self.root_repo.branch(patched_branch_name, &parent, true)?;
+
         Ok(())
     }
 }

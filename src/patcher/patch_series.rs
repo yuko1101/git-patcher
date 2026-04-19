@@ -1,21 +1,22 @@
 use std::{
+    collections::VecDeque,
     fs::{File, OpenOptions},
     io::{Seek, Write},
     path::{Path, PathBuf},
 };
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use ouroboros::self_referencing;
 
 pub struct PatchSeries {
     patches_dir: PathBuf,
-    patches: Vec<PathBuf>,
+    patches: VecDeque<PathBuf>,
     lock: PatchSeriesLock,
 }
 
 impl PatchSeries {
     pub fn new(patches_dir: &Path, series_path: &Path) -> anyhow::Result<Self> {
-        let mut patches = Vec::new();
+        let mut patches = VecDeque::new();
 
         let series_file = OpenOptions::new()
             .read(true)
@@ -42,7 +43,7 @@ impl PatchSeries {
                 );
             }
             if patch_file.exists() {
-                patches.push(patch_file);
+                patches.push_back(patch_file);
             } else {
                 anyhow::bail!(
                     "Patch file {} listed in series not found",
@@ -65,44 +66,26 @@ impl PatchSeries {
                 path.display()
             );
         }
-        self.patches.push(path);
+        self.patches.push_back(path);
         Ok(())
     }
 
     /// Automatically removes the patch file from file system if it exists
     pub fn consume_patch(&mut self) -> Option<(PathBuf, anyhow::Result<Vec<u8>>)> {
-        let Some(path) = self.patches.pop() else {
+        let Some(path) = self.patches.pop_front() else {
             return None;
         };
-        if !path.exists() {
-            let err = Err(anyhow::anyhow!(
-                "Patch file {} not found when consuming",
-                path.display()
-            ));
-            return Some((path, err));
-        }
+        let content = read_patch(&path).and_then(|content| {
+            std::fs::remove_file(&path).with_context(|| {
+                format!(
+                    "Failed to remove patch file {} after reading",
+                    path.display()
+                )
+            })?;
+            Ok(content)
+        });
 
-        let content = match std::fs::read(&path) {
-            Ok(content) => content,
-            Err(e) => {
-                let err = Err(anyhow::anyhow!(
-                    "Failed to read patch file {}: {}",
-                    path.display(),
-                    e
-                ));
-                return Some((path, err));
-            }
-        };
-        if let Err(e) = std::fs::remove_file(&path) {
-            let err = Err(anyhow::anyhow!(
-                "Failed to remove patch file {} after consuming: {}",
-                path.display(),
-                e
-            ));
-            return Some((path, err));
-        }
-
-        Some((path, Ok(content)))
+        Some((path, content))
     }
 
     pub fn len(&self) -> usize {
@@ -128,6 +111,12 @@ impl PatchSeries {
     pub fn consumer(&mut self) -> PatchSeriesConsumer<'_> {
         PatchSeriesConsumer { patch_series: self }
     }
+
+    pub fn peeker(&self) -> impl Iterator<Item = (PathBuf, anyhow::Result<Vec<u8>>)> {
+        self.patches
+            .iter()
+            .map(|path| (path.clone(), read_patch(path)))
+    }
 }
 
 #[self_referencing]
@@ -148,4 +137,13 @@ impl<'a> Iterator for PatchSeriesConsumer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.patch_series.consume_patch()
     }
+}
+
+fn read_patch(path: &Path) -> anyhow::Result<Vec<u8>> {
+    if !path.exists() {
+        bail!("Patch file {} not found", path.display());
+    }
+    let content = std::fs::read(path)
+        .with_context(|| format!("Failed to read patch file {}", path.display()))?;
+    Ok(content)
 }

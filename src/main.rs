@@ -26,6 +26,10 @@ enum SubCommand {
         #[clap(subcommand)]
         command: PatchSubCommand,
     },
+    Source {
+        #[clap(subcommand)]
+        command: SourceSubCommand,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
@@ -37,11 +41,16 @@ enum PatchSubCommand {
     },
 }
 
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+enum SourceSubCommand {
+    Sync,
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     match args.subcommand {
-        SubCommand::Push | SubCommand::Pop => {
+        SubCommand::Push | SubCommand::Pop | SubCommand::Source { .. } => {
             let root = args
                 .root
                 .or_else(|| utils::git_utils::find_root(&std::env::current_dir().ok()?)).context("Failed to find git repository root. Please specify the root directory with --root option.")?;
@@ -50,6 +59,9 @@ fn main() -> anyhow::Result<()> {
             match args.subcommand {
                 SubCommand::Push => commands::push::push(&mut patcher)?,
                 SubCommand::Pop => commands::pop::pop(&mut patcher)?,
+                SubCommand::Source { command } => match command {
+                    SourceSubCommand::Sync => commands::source::sync_source(&mut patcher)?,
+                },
                 _ => unreachable!(),
             }
         }
