@@ -10,6 +10,7 @@ use crate::utils::sig_utils::SignatureData;
 const X_GIT_PATCHER_AUTHOR: &str = "X-Git-Patcher-Author";
 const X_GIT_PATCHER_COMMITTER: &str = "X-Git-Patcher-Committer";
 const X_GIT_PATCHER_COMMIT_MESSAGE: &str = "X-Git-Patcher-Commit-Message";
+const X_GIT_PATCHER_PARENT_HASH: &str = "X-Git-Patcher-Parent-Hash";
 const X_GIT_PATCHER_COMMIT_HASH: &str = "X-Git-Patcher-Commit-Hash";
 pub fn get_patch(parent: &Commit, commit: &Commit, repo: &Repository) -> anyhow::Result<String> {
     let mut diff = repo.diff_tree_to_tree(Some(&parent.tree()?), Some(&commit.tree()?), None)?;
@@ -49,6 +50,7 @@ pub fn get_patch(parent: &Commit, commit: &Commit, repo: &Repository) -> anyhow:
         "{X_GIT_PATCHER_COMMIT_MESSAGE}: {}\n",
         BASE64_STANDARD.encode(commit.message_raw_bytes())
     ));
+    patch.push_str(&format!("{X_GIT_PATCHER_PARENT_HASH}: {}\n", parent.id()));
     patch.push_str(&format!("{X_GIT_PATCHER_COMMIT_HASH}: {}\n", commit.id()));
 
     patch.push_str("\n");
@@ -129,6 +131,7 @@ pub struct PatchMetadata {
     pub author: SignatureData,
     pub committer: SignatureData,
     pub commit_message: String,
+    pub parent_hash: Oid,
     pub commit_hash: Oid,
 }
 pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
@@ -173,6 +176,16 @@ pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
     // TODO: avoid unnecessary UTF-8 conversion by directly using the bytes when creating the commit object in git2
     let commit_message = std::str::from_utf8(&commit_message)?.to_string();
 
+    let parent_hash = headers
+        .get(X_GIT_PATCHER_PARENT_HASH)
+        .with_context(|| format!("Missing {} header in patch", X_GIT_PATCHER_PARENT_HASH))?;
+    let parent_hash = Oid::from_str(parent_hash).with_context(|| {
+        format!(
+            "Failed to parse parent hash in {} header: invalid OID format",
+            X_GIT_PATCHER_PARENT_HASH
+        )
+    })?;
+
     let commit_hash = headers
         .get(X_GIT_PATCHER_COMMIT_HASH)
         .with_context(|| format!("Missing {} header in patch", X_GIT_PATCHER_COMMIT_HASH))?;
@@ -187,6 +200,7 @@ pub fn parse_patch_metadata(vec: &Vec<u8>) -> anyhow::Result<PatchMetadata> {
         author: author_sig,
         committer: committer_sig,
         commit_message,
+        parent_hash,
         commit_hash,
     })
 }

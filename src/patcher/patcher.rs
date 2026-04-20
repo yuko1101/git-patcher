@@ -69,14 +69,12 @@ impl Patcher {
                 &tree,
                 &[&parent],
             )?;
-            if new_commit_oid != patch_metadata.commit_hash {
-                eprintln!(
-                    "Warning: The generated commit hash {} does not match the expected commit hash {} for patch {}. This may indicate that the patch was modified after being generated.",
-                    new_commit_oid,
-                    patch_metadata.commit_hash,
-                    patch.0.display()
-                );
-            }
+            validate_hash(
+                &parent.id(),
+                &patch_metadata.parent_hash,
+                &new_commit_oid,
+                &patch_metadata.commit_hash,
+            );
 
             patches_consumed = true;
         }
@@ -186,14 +184,12 @@ impl Patcher {
                 &tree,
                 &[&parent],
             )?;
-            if new_commit_oid != patch_metadata.commit_hash {
-                eprintln!(
-                    "Warning: The generated commit hash {} does not match the expected commit hash {} for patch {}. This may indicate that the patch was modified after being generated.",
-                    new_commit_oid,
-                    patch_metadata.commit_hash,
-                    patch.0.display()
-                );
-            }
+            validate_hash(
+                &parent.id(),
+                &patch_metadata.parent_hash,
+                &new_commit_oid,
+                &patch_metadata.commit_hash,
+            );
 
             parent = self.root_repo.find_commit(new_commit_oid)?;
         }
@@ -202,5 +198,26 @@ impl Patcher {
         self.root_repo.branch(patched_branch_name, &parent, true)?;
 
         Ok(())
+    }
+}
+
+fn validate_hash(
+    parent: &git2::Oid,
+    parent_expected: &git2::Oid,
+    commit: &git2::Oid,
+    commit_expected: &git2::Oid,
+) {
+    if parent != parent_expected {
+        eprintln!(
+            "Warning: Parent hash mismatch: expected {}, got {}. Unable to guarantee the integrity of the patch.",
+            parent_expected, parent
+        );
+        return;
+    }
+    if commit != commit_expected {
+        eprintln!(
+            "Warning: Commit hash mismatch: expected {}, got {}. This may indicate that the patch was modified after being generated.",
+            commit_expected, commit
+        );
     }
 }
