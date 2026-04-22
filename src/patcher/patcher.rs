@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
-use anyhow::bail;
-use git2::{ApplyLocation, Diff, Repository, build::CheckoutBuilder};
+use anyhow::{Ok, bail};
+use git2::{ApplyLocation, Diff, Index, Repository, Signature, build::CheckoutBuilder};
 
 use crate::{
-    patcher::{internal_state::InternalState, patch_series::PatchSeries},
+    patcher::{
+        internal_state::InternalState, patch_series::PatchSeries, sync_strategy::SyncStrategy,
+    },
     utils::{self, patch_utils::generate_patch_name},
 };
 
@@ -148,7 +150,59 @@ impl Patcher {
         Ok(())
     }
 
-    pub fn sync_source(&mut self) -> anyhow::Result<()> {
+    pub fn sync_source(&mut self, sync_strategy: SyncStrategy) -> anyhow::Result<()> {
+        let branch_name = sync_strategy.get_branch_name();
+        match sync_strategy {
+            SyncStrategy::Snapshot => self.sync_source_by_snapshot(branch_name)?,
+            SyncStrategy::Reconstruct => self.sync_source_by_reconstruct(branch_name)?,
+        }
+        Ok(())
+    }
+
+    fn sync_source_by_snapshot(&mut self, branch_name: &str) -> anyhow::Result<()> {
+        let upstream_head = self.upstream_repo.head()?.peel_to_commit()?;
+        let mut index = Index::new()?;
+        index.read_tree(&upstream_head.tree()?)?;
+
+        let mut tree = self
+            .root_repo
+            .find_tree(index.write_tree_to(&self.root_repo)?)?;
+
+        let patch_series = self.get_patch_series()?;
+        for patch in patch_series.peeker() {
+            let patch_bytes = patch.1?;
+            println!("Applying patch: {}", patch.0.display());
+            let diff = Diff::from_buffer(&patch_bytes)?;
+            tree = self.root_repo.find_tree(
+                self.root_repo
+                    .apply_to_tree(&tree, &diff, None)?
+                    .write_tree_to(&self.root_repo)?,
+            )?;
+        }
+
+        let branch_ref = format!("refs/heads/{}", branch_name);
+        let sig = Signature::now("Git Patcher", "git-patcher@internal.invalid")?;
+        let msg = format!(
+            "snapshot for {}",
+            self.root_repo.head()?.peel_to_commit()?.id()
+        );
+        let parent = self
+            .root_repo
+            .find_reference(&branch_ref)
+            .and_then(|r| r.peel_to_commit());
+        self.root_repo.commit(
+            Some(&branch_ref),
+            &sig,
+            &sig,
+            &msg,
+            &tree,
+            &parent.iter().collect::<Vec<_>>(),
+        )?;
+
+        Ok(())
+    }
+
+    fn sync_source_by_reconstruct(&mut self, branch_name: &str) -> anyhow::Result<()> {
         // fetch upstream base to root
         let upstream_head = self.upstream_repo.head()?.peel_to_commit()?;
         let mut remote = self
@@ -194,8 +248,7 @@ impl Patcher {
             parent = self.root_repo.find_commit(new_commit_oid)?;
         }
 
-        let patched_branch_name = "git-patcher/patched";
-        self.root_repo.branch(patched_branch_name, &parent, true)?;
+        self.root_repo.branch(branch_name, &parent, true)?;
 
         Ok(())
     }

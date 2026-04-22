@@ -1,3 +1,4 @@
 pub mod internal_state;
 pub mod patch_series;
 pub mod patcher;
+pub mod sync_strategy;
