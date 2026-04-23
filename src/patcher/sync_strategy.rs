@@ -1,6 +1,7 @@
+use serde::Deserialize;
 use strum::EnumString;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumString)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumString, Deserialize)]
 #[strum(serialize_all = "lowercase")]
 pub enum SyncStrategy {
     /// Sync by creating a new commit using the tree of the new source.

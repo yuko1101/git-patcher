@@ -4,9 +4,10 @@ use anyhow::{Context, Ok};
 use clap::{Parser, Subcommand};
 use git2::Oid;
 
-use crate::patcher::patcher::Patcher;
+use crate::{config::config::Config, patcher::patcher::Patcher};
 
 mod commands;
+mod config;
 mod patcher;
 mod utils;
 
@@ -14,6 +15,8 @@ mod utils;
 struct Args {
     #[clap(short, long)]
     root: Option<PathBuf>,
+    #[clap(short, long)]
+    config: Option<PathBuf>,
     #[clap(subcommand)]
     subcommand: SubCommand,
 }
@@ -49,6 +52,8 @@ enum SourceSubCommand {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    let config = Config::load(args.config)?;
+
     match args.subcommand {
         SubCommand::Push | SubCommand::Pop | SubCommand::Source { .. } => {
             let root = args
@@ -60,7 +65,7 @@ fn main() -> anyhow::Result<()> {
                 SubCommand::Push => commands::push::push(&mut patcher)?,
                 SubCommand::Pop => commands::pop::pop(&mut patcher)?,
                 SubCommand::Source { command } => match command {
-                    SourceSubCommand::Sync => commands::source::sync_source(&mut patcher)?,
+                    SourceSubCommand::Sync => commands::source::sync_source(&mut patcher, &config)?,
                 },
                 _ => unreachable!(),
             }

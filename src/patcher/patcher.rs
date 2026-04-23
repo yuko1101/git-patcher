@@ -150,7 +150,7 @@ impl Patcher {
         Ok(())
     }
 
-    pub fn sync_source(&mut self, sync_strategy: SyncStrategy) -> anyhow::Result<()> {
+    pub fn sync_source(&mut self, sync_strategy: &SyncStrategy) -> anyhow::Result<()> {
         let branch_name = sync_strategy.get_branch_name();
         match sync_strategy {
             SyncStrategy::Snapshot => self.sync_source_by_snapshot(branch_name)?,
