@@ -19,7 +19,7 @@ impl Config {
         });
         let content = path.map(|p| std::fs::read_to_string(p)).transpose()?;
         let config = content
-            .map(|c| serde_json::from_str(&c))
+            .map(|c| toml::from_str(&c))
             .transpose()?
             .unwrap_or_default();
 
