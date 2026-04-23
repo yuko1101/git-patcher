@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SyncStrategy {
     /// Sync by creating a new commit using the tree of the new source.
     /// This records the current state as a single update, extending the history without modifying past commits.
