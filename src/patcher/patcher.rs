@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Ok, bail};
+use anyhow::{Context, Ok, bail};
 use git2::{ApplyLocation, Diff, Index, Repository, Signature, build::CheckoutBuilder};
 
 use crate::{
@@ -160,14 +160,18 @@ impl Patcher {
     }
 
     fn sync_source_by_snapshot(&mut self, branch_name: &str) -> anyhow::Result<()> {
-        let upstream_head = self.upstream_repo.head()?.peel_to_commit()?;
-        let mut index = Index::new()?;
-        index.read_tree(&upstream_head.tree()?)?;
-
-        let mut tree = self
+        // fetch upstream tree to root
+        let upstream_head_tree = self.upstream_repo.head()?.peel_to_tree()?;
+        let mut remote = self
             .root_repo
-            .find_tree(index.write_tree_to(&self.root_repo)?)?;
+            .remote_anonymous(&self.upstream_path.to_string_lossy())?;
+        println!(
+            "Fetching upstream head tree {} to root repository",
+            upstream_head_tree.id()
+        );
+        remote.fetch(&[upstream_head_tree.id().to_string()], None, None)?;
 
+        let mut tree = self.root_repo.find_tree(upstream_head_tree.id())?;
         let patch_series = self.get_patch_series()?;
         for patch in patch_series.peeker() {
             let patch_bytes = patch.1?;
@@ -203,7 +207,7 @@ impl Patcher {
     }
 
     fn sync_source_by_reconstruct(&mut self, branch_name: &str) -> anyhow::Result<()> {
-        // fetch upstream base to root
+        // fetch upstream commit to root
         let upstream_head = self.upstream_repo.head()?.peel_to_commit()?;
         let mut remote = self
             .root_repo
