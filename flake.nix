@@ -74,7 +74,7 @@
             buildInputs = [pkgs.git];
           } ''
             mkdir -p $out
-            cp -r ${upstream}/. $out/
+            cp -r ${upstream}/. $out/ --no-preserve=mode
             cd $out
             git init -b main
             while IFS= read -r line; do
